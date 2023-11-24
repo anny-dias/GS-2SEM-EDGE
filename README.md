@@ -20,6 +20,9 @@ Neste trabalho, exploraremos as principais causas do desperdício de medicamento
 
 aqui
 
+## Simulação do projeto
+aqui
+
 ## Link para o vídeo
 aqui
 
