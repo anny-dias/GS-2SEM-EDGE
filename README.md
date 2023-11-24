@@ -17,11 +17,108 @@ Neste trabalho, exploraremos as principais causas do desperdício de medicamento
 
 
 ## Instruções de como configurar e executar a aplicação
+###  Materiais necessários:
+<ul>
+  <li>ESP32</li>
+  <li>Sensor de temperatura e umidade DHT22</li>
+  <li>Cabos de conexão</li>
+</ul>
 
-aqui
+### Passos: 
+
+#### 1- Instalar Bibliotecas:
+<ul>
+    <li>Abra o Arduino IDE.</li>
+    <li>Vá em "Sketch" -> "Incluir Biblioteca" -> "Gerenciar Bibliotecas".</li>
+    <li>Pesquise e instale as seguintes bibliotecas: "DHT sensor library" (para o sensor DHT22) e "Adafruit Unified Sensor" (uma dependência para a biblioteca do DHT)</li>
+</ul>
+
+#### 2- Conectar Hardware:
+<ul>
+    <li>Conecte o DHT22 ao ESP32 usando fios. Conecte o pino de dados do DHT22 a um pino digital (D1) no ESP32.</li>
+    <li>Certifique-se de alimentar o DHT22 com a voltagem correta</li>
+</ul>
+
+#### 3- Programar o ESP32:
+<ul>
+    <li>Abra o Arduino IDE e crie um novo sketch.</li>
+    <li>Inclua as bibliotecas necessárias no início do código.</li>
+</ul>
+
+      ```
+        #include <Adafruit_Sensor.h>
+        #include <DHT.h>
+        #include <DHT_U.h>
+      ```
+<ul>
+    <li>Defina as constantes para o pino de dados do DHT22 e o tipo de sensor.</li>
+</ul>
+
+    ```
+        #define DHTPIN 1      // Pino de dados do DHT22 conectado ao pino D1 no ESP32
+        #define DHTTYPE DHT22 // Tipo de sensor DHT22
+
+      ```
+
+<ul>
+    <li>Crie uma instância do sensor DHT.</li>
+</ul>
+
+    ```
+        DHT_Unified dht(DHTPIN, DHTTYPE);
+      ```
+<ul>
+    <li>No método setup(), inicialize o sensor.</li>
+</ul>
+
+      ```
+        void setup() {
+          Serial.begin(115200);
+          dht.begin();
+        }
+
+      ```
+
+<ul>
+    <li>No método loop(), leia os valores de temperatura e umidade e imprima-os no monitor serial.</li>
+</ul>
+      
+      ```
+        void loop() {
+            sensors_event_t event;
+            dht.temperature().getEvent(&event);
+        
+            if (isnan(event.temperature)) {
+                Serial.println("Erro ao ler temperatura!");
+            } else {
+                Serial.print("Temperatura: ");
+                Serial.print(event.temperature);
+                Serial.println(" °C");
+            }
+        
+            dht.humidity().getEvent(&event);
+        
+            if (isnan(event.relative_humidity)) {
+                Serial.println("Erro ao ler umidade!");
+            } else {
+                Serial.print("Umidade: ");
+                Serial.print(event.relative_humidity);
+                Serial.println(" %");
+            }
+        
+            delay(2000); // Espere 2 segundos antes de ler novamente
+        }
+              
+      ```
+
+#### 4- Upload e Monitoramento:
+<ul>
+    <li>Compile e faça o upload do código para o seu ESP32.</li>
+    <li>Abra o Monitor Serial (Tools -> Serial Monitor) para ver os valores de temperatura e umidade sendo lidos a cada 2 segundos.</li>
+</ul>
 
 ## Simulação do projeto
-aqui
+https://wokwi.com/projects/382304674782635009
 
 ## Link para o vídeo
 aqui
