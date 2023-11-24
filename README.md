@@ -361,7 +361,7 @@ Neste trabalho, exploraremos as principais causas do desperdício de medicamento
 https://wokwi.com/projects/382308893669669889
 
 ## Link para o vídeo
-aqui
+https://youtu.be/zTSM3J2qnag
 
 ## Copyright
 
