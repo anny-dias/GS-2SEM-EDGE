@@ -22,6 +22,8 @@ Neste trabalho, exploraremos as principais causas do desperdício de medicamento
   <li>ESP32</li>
   <li>Sensor de temperatura e umidade DHT22</li>
   <li>Cabos de conexão</li>
+  <li>Resistor</li>
+  <li>Placa de ensaio</li>
 </ul>
 
 ### Passos: 
@@ -30,12 +32,12 @@ Neste trabalho, exploraremos as principais causas do desperdício de medicamento
 <ul>
     <li>Abra o Arduino IDE.</li>
     <li>Vá em "Sketch" -> "Incluir Biblioteca" -> "Gerenciar Bibliotecas".</li>
-    <li>Pesquise e instale as seguintes bibliotecas: "DHT sensor library" (para o sensor DHT22) e "Adafruit Unified Sensor" (uma dependência para a biblioteca do DHT)</li>
+    <li>Pesquise e instale as seguintes bibliotecas: "DHT sensor library" (para o sensor DHT22) e "PubSubClient" (para comunicar com MQTT)</li>
 </ul>
 
 #### 2- Conectar Hardware:
 <ul>
-    <li>Conecte o DHT22 ao ESP32 usando fios. Conecte o pino de dados do DHT22 a um pino digital (D1) no ESP32.</li>
+    <li>Conecte o DHT22 ao ESP32 usando fios. Conecte o pino de dados do DHT22 a um pino digital (D2) no ESP32.</li>
     <li>Certifique-se de alimentar o DHT22 com a voltagem correta</li>
 </ul>
 
@@ -46,79 +48,317 @@ Neste trabalho, exploraremos as principais causas do desperdício de medicamento
 </ul>
 
       ```
-        #include <Adafruit_Sensor.h>
-        #include <DHT.h>
-        #include <DHT_U.h>
+        #include "DHT.h"
+        #include <PubSubClient.h> 
+        #include <WiFi.h>
       ```
 <ul>
-    <li>Defina as constantes para o pino de dados do DHT22 e o tipo de sensor.</li>
+    <li>Definindo Topicos</li>
 </ul>
 
     ```
-        #define DHTPIN 1      // Pino de dados do DHT22 conectado ao pino D1 no ESP32
-        #define DHTTYPE DHT22 // Tipo de sensor DHT22
+        #define TOPICO_SUBSCRIBE    "/TEF/lamp105/cmd"        //Tópico MQTT de escuta
+        #define TOPICO_PUBLISH      "/TEF/lamp105/attrs"      //Tópico MQTT de envio de informações para Broker
+        #define TOPICO_PUBLISH_3    "/TEF/lamp105/attrs/u"    //Tópico MQTT dos dados de Umidade
+        #define TOPICO_PUBLISH_4    "/TEF/lamp105/attrs/t"    //Tópico MQTT dos dados de Temperatura
+        #define ID_MQTT  "fiware_109"   //id mqtt (para identificação de sessão)
 
       ```
 
 <ul>
-    <li>Crie uma instância do sensor DHT.</li>
+    <li>WIFI</li>
 </ul>
 
     ```
-        DHT_Unified dht(DHTPIN, DHTTYPE);
+        const char* SSID = "Wokwi-GUEST"; // SSID / nome da rede WI-FI 
+        const char* PASSWORD = ""; // Senha da rede WI-FI
+          
+        // MQTT
+        const char* BROKER_MQTT = "46.17.108.113"; //URL do broker MQTT que se deseja utilizar
+        int BROKER_PORT = 1883;                    // Porta do Broker MQTT
+        
+        // Variáveis e objetos globais
+        WiFiClient espClient;          // Cria o objeto espClient
+        PubSubClient MQTT(espClient);  // Instancia o Cliente MQTT passando o objeto espClient
+        char EstadoSaida = '0';        // Variável que armazena o estado atual da saída
       ```
 <ul>
-    <li>No método setup(), inicialize o sensor.</li>
+    <li>Prototypes</li>
 </ul>
 
       ```
-        void setup() {
-          Serial.begin(115200);
-          dht.begin();
-        }
+        void initSerial();
+        void initWiFi();
+        void initMQTT();
+        void reconectWiFi(); 
+        void mqtt_callback(char* topic, byte* payload, unsigned int length);
+        void VerificaConexoesWiFIEMQTT(void);
+        void InitOutput(void);
+
+
+      ```
+<ul>
+    <li>DHT22</li>
+</ul>
+
+      ```
+        #define DHTPIN 2
+        #define DHTTYPE DHT22
+        //#define DHTTYPE DHT11
+        DHT dht(DHTPIN, DHTTYPE);
+
 
       ```
 
+
+
 <ul>
-    <li>No método loop(), leia os valores de temperatura e umidade e imprima-os no monitor serial.</li>
+    <li>Funções de inicialização</li>
 </ul>
       
       ```
-        void loop() {
-            sensors_event_t event;
-            dht.temperature().getEvent(&event);
-        
-            if (isnan(event.temperature)) {
-                Serial.println("Erro ao ler temperatura!");
-            } else {
-                Serial.print("Temperatura: ");
-                Serial.print(event.temperature);
-                Serial.println(" °C");
-            }
-        
-            dht.humidity().getEvent(&event);
-        
-            if (isnan(event.relative_humidity)) {
-                Serial.println("Erro ao ler umidade!");
-            } else {
-                Serial.print("Umidade: ");
-                Serial.print(event.relative_humidity);
-                Serial.println(" %");
-            }
-        
-            delay(2000); // Espere 2 segundos antes de ler novamente
-        }
+       void setup() {
+            // put your setup code here, to run once:
+            // Inicializações:
+            InitOutput();
+            initSerial();
+            initWiFi();
+            initMQTT();
+            delay(5000);
+          
+            Serial.println(F("DHTxx Test!"));
+          }
+          
+          void initSerial() 
+          {
+            Serial.begin(115200);
+          }
+          
+          // Função: Inicializa e conecta-se na rede WI-FI desejada
+          void initWiFi() 
+          {
+              delay(10);
+              Serial.println("----- Conexão WI-FI -----");
+              Serial.print("Conectando-se na rede: ");
+              Serial.println(SSID);
+              Serial.println("Aguarde...");
+               
+              reconectWiFi();
+          }
+            
+          // Função: Inicializa parâmetros de conexão MQTT(endereço do broker, porta e seta função de callback)
+          void initMQTT() 
+          {
+              MQTT.setServer(BROKER_MQTT, BROKER_PORT); 
+              MQTT.setCallback(mqtt_callback);
+          }
+      ```
+<ul>
+    <li>Função de callback: Chamada toda vez que uma informação de um dos tópicos subescritos chega</li>
+</ul>
+      
+      ```
+                 void mqtt_callback(char* topic, byte* payload, unsigned int length) 
+          {
+              String msg;
+              //obtem a string do payload recebido
+              for(int i = 0; i < length; i++) 
+              {
+                 char c = (char)payload[i];
+                 msg += c;
+              }
+              Serial.print("- Mensagem recebida: ");
+              Serial.println(msg);
+            
+              // Toma ação dependendo da string recebida:
+              // Verifica se deve colocar nivel alto de tensão na saída D0:
+              if (msg.equals("lamp105@on|"))
+              {
+                  digitalWrite(2, HIGH);
+                  EstadoSaida = '1';
+              }
+           
+              //Verifica se deve colocar nivel alto de tensão na saída D0:
+              if (msg.equals("lamp105@off|"))
+              {
+                  digitalWrite(2, LOW);
+                  EstadoSaida = '0';
+              }
               
+          }
+      ```
+<ul>
+    <li>Função: Reconecta-se ao broker MQTT (caso ainda não esteja conectado ou em caso de a conexão cair) em caso de sucesso na conexão ou reconexão, o subscribe dos tópicos é refeito.</li>
+</ul>
+      
+      ```void reconnectMQTT() 
+        {
+            while (!MQTT.connected()) 
+            {
+                Serial.print("* Tentando se conectar ao Broker MQTT: ");
+                Serial.println(BROKER_MQTT);
+                if (MQTT.connect(ID_MQTT)) 
+                {
+                    Serial.println("Conectado com sucesso ao Broker MQTT!");
+                    MQTT.subscribe(TOPICO_SUBSCRIBE); 
+                } 
+                else
+                {
+                    Serial.println("Falha ao reconectar no Broker.");
+                    Serial.println("Nova tentativa de conexão em 2s");
+                    delay(2000);
+                }
+            }
+      }    
+      ```
+<ul>
+    <li>Função: Reconecta-se ao WiFi</li>
+</ul>
+      
+      ```void reconectWiFi() 
+        {
+          // Se já está conectado a rede WI-FI, nada é feito. Caso contrário, ocorrerá tentativas           de conexão
+          if (WiFi.status() == WL_CONNECTED)
+              return;
+                
+          WiFi.begin(SSID, PASSWORD); // Conecta na rede WI-FI
+            
+          while (WiFi.status() != WL_CONNECTED) 
+          {
+              delay(100);
+              Serial.print(".");
+          }
+          
+          Serial.println();
+          Serial.print("Conectado com sucesso na rede: ");
+          Serial.print(SSID);
+          Serial.print("\n");
+          Serial.print("IP obtido: ");
+          Serial.println(WiFi.localIP());
+        }
+ 
       ```
 
+  <ul>
+    <li>Função: Verifica o estado das conexões WiFI e ao broker MQTT. Em caso de desconexão, a conexão é refeita.</li>
+</ul>
+      
+      ```void VerificaConexoesWiFIEMQTT(void)
+        {
+            if (!MQTT.connected()) 
+                reconnectMQTT(); //Se não há conexão com o Broker, a conexão é refeita
+             
+             reconectWiFi(); //Se não há conexão com o WiFI, a conexão é refeita
+        }
+ 
+      ```
+
+  <ul>
+    <li>Função: Envia ao Broker o estado atual do output </li>
+</ul>
+      
+      ```void EnviaEstadoOutputMQTT(void)
+      {
+          if (EstadoSaida == '1')
+          {
+            MQTT.publish(TOPICO_PUBLISH, "s|on");
+            Serial.println("- Led Ligado");
+          }
+          if (EstadoSaida == '0')
+          {
+            MQTT.publish(TOPICO_PUBLISH, "s|off");
+            Serial.println("- Led Desligado");
+          }
+          Serial.println("- Estado do LED enviado ao Broker!");
+          delay(1000);
+      }
+      ```
+
+  <ul>
+    <li> Função: Inicializa o output em nível lógico baixo </li>
+</ul>
+      
+      ```void InitOutput(void)
+        {
+            // IMPORTANTE: O Led já contido na placa é acionado com lógica invertida (ou seja,
+            // enviar HIGH para o output faz o Led apagar / enviar LOW faz o Led acender)
+            pinMode(2, OUTPUT);
+            digitalWrite(2, HIGH);
+            
+            boolean toggle = false;
+        
+            for(int i = 0; i <= 10; i++)
+            {
+                toggle = !toggle;
+                digitalWrite(2,toggle);
+                delay(200);           
+            }
+        
+            digitalWrite(2, LOW);
+        }
+
+      ```
+<ul>
+    <li> Void loop: </li>
+</ul>
+
+      ```
+      
+      void loop() {
+        // put your main code here, to run repeatedly:
+        delay(2000);
+      
+        char msgBuffer[4];
+        // Garante funcionamento das conexões WiFi e ao broker MQTT
+        VerificaConexoesWiFIEMQTT();
+      
+        // Envia o status de todos os outputs para o Broker no protocolo esperado
+        EnviaEstadoOutputMQTT();
+      
+        // keep-alive da comunicação com broker MQTT
+        MQTT.loop();
+      
+        // Leitura DHT
+        float h = dht.readHumidity();
+        dtostrf(h, 4, 2, msgBuffer);
+        MQTT.publish(TOPICO_PUBLISH_3,msgBuffer);
+      
+        float t = dht.readTemperature();
+        float f = dht.readTemperature(true);
+        dtostrf(t, 4, 2, msgBuffer);
+        MQTT.publish(TOPICO_PUBLISH_4,msgBuffer);
+      
+        if (isnan(h) || isnan(t) || isnan(f)){
+          Serial.println(F("Failed to read from DHT sensor!"));
+          return;
+        }
+      
+        float hif = dht.computeHeatIndex(f, h);
+        float hic = dht.computeHeatIndex(t, h, false);
+      
+      
+        Serial.print(F("Umidade:  "));
+        Serial.print(h);
+        Serial.print(F("% || Temperatura: "));
+        Serial.print(t);
+        Serial.print(F("°C "));
+        Serial.print(f);
+        Serial.print(F("°F || Indice de calor: "));
+        Serial.print(hic);
+        Serial.print(F(" °C "));
+        Serial.print(hif);
+        Serial.println(F(" °F "));
+      
+      }
+      ```
+                
 #### 4- Upload e Monitoramento:
 <ul>
     <li>Compile e faça o upload do código para o seu ESP32.</li>
-    <li>Abra o Monitor Serial (Tools -> Serial Monitor) para ver os valores de temperatura e umidade sendo lidos a cada 2 segundos.</li>
 </ul>
 
 ## Simulação do projeto
-https://wokwi.com/projects/382304674782635009
+https://wokwi.com/projects/382308893669669889
 
 ## Link para o vídeo
 aqui
